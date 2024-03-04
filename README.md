@@ -1,5 +1,7 @@
-# hf-mirror-cli
+# hf-mirror-cli 介绍
+由于 huggingface的仓库地址位于海外，每次下载dataset和model 太慢了，于是抽空开发了一个可以在windows开发环境，快速拉取huggingface 平台上的数据工具
 hugingface-cli 国内镜像，可以快速下载hugingface上的模型
+
 
 # 使用教程
 1. 下载 hf-mirror-cli.exe 到本地 ，然后打开cmd 执行以下命令
@@ -8,7 +10,11 @@ hf-mirror-cli.exe Intel/dynamic_tinybert
 
 ```
 
-2. 下载效果
+2. 镜像地址使用 
+
+ https://hf-mirror.com/
+
+3. 下载效果
 ```cmd
 E:\hf-mirror-cli\src\dist>hf-mirror-cli.exe Intel/dynamic_tinybert
 C:\Users\Administrator\.cache\huggingface\hub\hfd
