@@ -112,13 +112,42 @@ def check_huggingface_unavailable_url():
 
 
 def get_remote_file_size(url):
-    response = requests.head(url, allow_redirects=False)
-    if response.status_code == 302 or response.status_code == 301:
-        redirect_url = response.headers['Location']
-        redirect_response = requests.head(redirect_url)
-        return int(redirect_response.headers['Content-Length'])
+    try:
+        response = requests.head(url, allow_redirects=False)
+        if response.status_code == 302 or response.status_code == 301:
+            redirect_url = response.headers['Location']
+            redirect_response = requests.head(redirect_url)
+            return int(redirect_response.headers['Content-Length'])
+        else:
+            return int(response.headers['Content-Length'])
+    except Exception as e:
+        return -1
+
+
+"""
+检测磁盘大小
+"""
+
+
+def check_disk_space(file_size, filename, url):
+    dir_path = os.getcwd()
+    one_gb = 1 * 1024 * 1024 * 1024
+    if os.name == 'posix':
+        stat = os.statvfs(dir_path)
+        free_space = stat.f_bavail * stat.f_frsize
+        free_space_mb = free_space / (1024 * 1024)
+        if free_space > 0 and free_space - file_size < one_gb:
+            print(f"警告: 磁盘空间不足1GB，无法安全下载文件。fileName:{filename},url:{url},free_space:{free_space_mb}MB")
+            sys.exit(1)
+        else:
+            print(f"--->磁盘空间正常下载文件。剩余：{free_space_mb}MB")
+
+    elif os.name == 'nt':
+        print("windows操作系统，默认为开发环境，不做磁盘空闲容量检查")
+        return
     else:
-        return int(response.headers['Content-Length'])
+        print("未检测到操作系统类型，不做磁盘空闲容量检查")
+        return
 
 
 """
@@ -155,6 +184,7 @@ def get_requests_retry_session(
 
 
 def download_file_with_range(url, filename, start_byte, remote_file_size):
+    check_disk_space(remote_file_size, filename, url)
     thread_name = threading.current_thread().name
     print(f"线程-{thread_name}-下载-{url}")
     print(f"支持端点续传 {filename}，本地文件大小：{start_byte}，服务端文件大小：{remote_file_size}")
@@ -165,7 +195,34 @@ def download_file_with_range(url, filename, start_byte, remote_file_size):
 
     with open(filename, 'ab') as f:
         total_size = int(response.headers.get('content-length', 0))
-        progress_bar = tqdm(total=total_size, unit='B', unit_scale=True, ncols=100, ascii=True)
+        progress_bar = tqdm(total=total_size, unit='B', unit_scale=True, ncols=100, ascii=True, desc=f"<--- Downloading {filename}")
+
+        for chunk in response.iter_content(chunk_size=8192):
+            if chunk:
+                f.write(chunk)
+                progress_bar.update(len(chunk))
+
+    progress_bar.close()
+    print(f"完成下载 {filename}")
+
+
+"""
+获取不到content-length 简单下载
+"""
+
+
+def download_file_simple(url, filename):
+    thread_name = threading.current_thread().name
+    print(f"线程-{thread_name} download_file_simple 开始下载-{url} ")
+    session = get_requests_retry_session()
+    response = session.get(url, stream=True, timeout=60)
+    check_disk_space(0, filename, url)
+    with open(filename, 'wb') as f:
+        total_size = int(response.headers.get('content-length', 0))
+        if total_size != 0:
+            progress_bar = tqdm(total=total_size, unit='B', unit_scale=True, ncols=100, ascii=True, desc=f"<--- Downloading {filename}")
+        else:
+            progress_bar = tqdm(unit='B', unit_scale=True, ncols=100, ascii=True, desc=f"<--- Downloading {filename}")
 
         for chunk in response.iter_content(chunk_size=8192):
             if chunk:
@@ -251,7 +308,7 @@ def download_model(model_id):
     print(f"--->大文件 文件数量{len(file_names)},file_names : {file_names}")
     for index, filename in enumerate(file_names):
         url = f"{repo_url}/resolve/main/{filename}"
-        print(f"------>开始下载第{index+1}个文件: {filename}，url: {url}")
+        print(f"------>开始下载第{index + 1}个文件: {filename}，url: {url}")
         if filename == "":
             print(f"LFS file name is empty skip")
             continue
@@ -260,32 +317,32 @@ def download_model(model_id):
             remote_file_size = get_remote_file_size(url)
 
             if local_file_size < remote_file_size:
-                print(
-                    f"\nFile {filename} local_file_size={local_file_size}，remote_file_size={remote_file_size}")
+                print(f"\nFile {filename} local_file_size={local_file_size}，remote_file_size={remote_file_size}")
                 print(f"\nFile {filename} exists but is incomplete. Continuing download...")
-                # download_file_with_range(url, filename, local_file_size, remote_file_size)
-                # 多线程下载
                 execute_task(download_file_with_range, url, filename, local_file_size, remote_file_size)
+            elif remote_file_size == -1:
+                execute_task(download_file_simple, url, filename)
+                continue
             else:
-                print(f"File {filename} already exists and is complete. Skipping...")
+                print(f"\nFile {filename} 已存在 不需要下载")
                 continue
 
-
-
-if len(sys.argv) < 2:
-    print("用法: hf-mirror-cli.exe <modelId> \n示例: hf-mirror-cli.exe Intel/dynamic_tinybert")
-    exit(1)
 
 print("--->start-开始检查环境和网络")
 print("--->检查当前环境是否安装了git和git-lfs")
 check_git_installation()
-model_id = sys.argv[1]
+check_tool_availability()
+if len(sys.argv) < 2:
+    print("正确用法: hf-mirror-cli.exe <modelId> \n示例: hf-mirror-cli.exe Intel/dynamic_tinybert")
+    sys.exit(1)
 token = sys.argv[2] if len(sys.argv) >= 3 else None
-# print(f"\n***********开始下载{model_id}**************")
-# model_id = "Intel/dynamic_tinybert"
+model_id = sys.argv[1]
+
+# 本地测试
+# model_id = "gpt2"
+# # hf-mirror-cli bigscience/bloom-560m
 # token = ""
 HF_TOKEN = os.environ.get('HF_TOKEN', token)
-check_tool_availability()
 base_path = os.path.abspath(os.path.dirname(__file__))
 model_dir = os.path.join(base_path, model_id.split('/')[-1])
 model_cache_local_path = get_hfd_file_path()
@@ -294,4 +351,3 @@ print("----->end-环境检查完毕正常")
 print("--->开始拉起下载模型数据并发任务")
 download_model(model_id)
 print(f"model:{model_id} 下载中,完成后model存放路径[{model_cache_local_path}]")
-
