@@ -15,12 +15,26 @@
 - [hf-mirror-cli.exe](https://github.com/wangshuai67/hf-mirror-cli/releases/download/1.0.0/hf-mirror-cli.exe)
 
 # 使用教程
-1. 下载 [hf-mirror-cli.exe](https://github.com/wangshuai67/hf-mirror-cli/releases/download/1.0.0/hf-mirror-cli.exe) 到本地 ，然后打开cmd 执行以下命令
+1. 第一种使用方法 下载 [hf-mirror-cli.exe](https://github.com/wangshuai67/hf-mirror-cli/releases/download/1.0.0/hf-mirror-cli.exe) 到本地 ，然后打开cmd 执行以下命令
 ```shell
 hf-mirror-cli Intel/dynamic_tinybert
 
 ```
 如果为了方便，可以将此可执行文件，放置到python 的安装目录，一般python 安装目录已经配置了环境变量，所以直接使用
+
+2. 第二种使用方法(支持linux和MacOS)
+   将 [hf-mirror-cli.py](https://github.com/wangshuai67/hf-mirror-cli/blob/a26f0565ef08ac9a22725eb1f3b2f421e9e49cef/src/hf-mirror-cli.py) 下载到本地 
+   ```bash
+     python .\hf-mirror-cli.py Intel/dynamic_tinybert
+   ```
+   如果缺少包可以把[requirements.txt](https://github.com/wangshuai67/hf-mirror-cli/blob/a26f0565ef08ac9a22725eb1f3b2f421e9e49cef/requirements.txt)下载到本地
+   然后执行
+   ```bash
+      pip install -r requirements.txt
+   ```
+   可以把 python .\hf-mirror-cli.py Intel/dynamic_tinybert
+   ![image](https://github.com/wangshuai67/hf-mirror-cli/assets/13214849/1dd10ad6-5f5e-467a-9d6b-e8eabbdc53f3)
+
 
 2. 默认使用的国内镜像地址 
 
