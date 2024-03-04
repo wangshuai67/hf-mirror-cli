@@ -1,4 +1,4 @@
-# hf-mirror-cli 介绍
+### hf-mirror-cli 介绍
 由于 huggingface的仓库地址位于海外，每次下载dataset和model 太慢了，于是抽空开发了一个可以在windows开发环境，快速拉取huggingface 平台上的数据工具
 
 使用hugingface-cli 国内镜像，可以快速下载hugingface上的模型
@@ -14,33 +14,35 @@
 ### windows下载
 - [hf-mirror-cli.exe](https://github.com/wangshuai67/hf-mirror-cli/releases/download/1.0.0/hf-mirror-cli.exe)
 
-# 使用教程
-1. 第一种使用方法 下载 [hf-mirror-cli.exe](https://github.com/wangshuai67/hf-mirror-cli/releases/download/1.0.0/hf-mirror-cli.exe) 到本地 ，然后打开cmd 执行以下命令
+## 1. 使用教程
+#### 1. 第一种使用方法 
+a. 下载 [hf-mirror-cli.exe](https://github.com/wangshuai67/hf-mirror-cli/releases/download/1.0.0/hf-mirror-cli.exe) 到本地 ，然后打开cmd 执行以下命令
 ```shell
 hf-mirror-cli Intel/dynamic_tinybert
 
 ```
-如果为了方便，可以将此可执行文件，放置到python 的安装目录，一般python 安装目录已经配置了环境变量，所以直接使用
+b. 如果为了方便，可以将此可执行文件，放置到python 的安装目录，一般python 安装目录已经配置了环境变量，所以直接使用
 
-2. 第二种使用方法(支持linux和MacOS)
-   将 [hf-mirror-cli.py](https://github.com/wangshuai67/hf-mirror-cli/blob/a26f0565ef08ac9a22725eb1f3b2f421e9e49cef/src/hf-mirror-cli.py) 下载到本地 
+#### 2. 第二种使用方法(支持linux和MacOS)
+   a. 将 [hf-mirror-cli.py](https://github.com/wangshuai67/hf-mirror-cli/blob/a26f0565ef08ac9a22725eb1f3b2f421e9e49cef/src/hf-mirror-cli.py) 下载到本地 
    ```bash
      python .\hf-mirror-cli.py Intel/dynamic_tinybert
    ```
-   如果缺少包可以把[requirements.txt](https://github.com/wangshuai67/hf-mirror-cli/blob/a26f0565ef08ac9a22725eb1f3b2f421e9e49cef/requirements.txt)下载到本地
-   然后执行
+   b. 如果缺少包可以把[requirements.txt](https://github.com/wangshuai67/hf-mirror-cli/blob/a26f0565ef08ac9a22725eb1f3b2f421e9e49cef/requirements.txt)下载到本地
+   c. 然后执行
    ```bash
       pip install -r requirements.txt
    ```
-   可以把 python .\hf-mirror-cli.py Intel/dynamic_tinybert
+  d. 使用效果
    ![image](https://github.com/wangshuai67/hf-mirror-cli/assets/13214849/1dd10ad6-5f5e-467a-9d6b-e8eabbdc53f3)
 
 
-2. 默认使用的国内镜像地址 
+## 2. 默认使用的国内镜像地址 
+  默认的不用配置，如果需要自定义 配置环境变量HF_ENDPOINT="镜像地址"
+  默认为 https://hf-mirror.com/   
+  站长[@padeoe](https://github.com/padeoe)
 
- https://hf-mirror.com/   站长[@padeoe](https://github.com/padeoe)
-
-3. 下载效果
+## 3. 下载效果
    
 ```cmd
 E:\hf-mirror-cli\src\dist>hf-mirror-cli.exe Intel/dynamic_tinybert
