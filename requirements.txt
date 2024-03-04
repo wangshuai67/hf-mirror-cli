@@ -1,0 +1,5 @@
+requests
+gitpython
+tqdm
+transformers
+urllib3
