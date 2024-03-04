@@ -141,3 +141,5 @@ pnpm-debug.log*
 *.sw?
 package-lock.json
 work/tomcat*
+/src/dist/
+/src/hf-mirror-cli.spec
