@@ -24,7 +24,7 @@ hf-mirror-cli Intel/dynamic_tinybert
 
 2. 默认使用的国内镜像地址 
 
- https://hf-mirror.com/
+ https://hf-mirror.com/   站长[@padeoe](https://github.com/padeoe)
 
 3. 下载效果
    
