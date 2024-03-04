@@ -1,6 +1,8 @@
 # hf-mirror-cli 介绍
 由于 huggingface的仓库地址位于海外，每次下载dataset和model 太慢了，于是抽空开发了一个可以在windows开发环境，快速拉取huggingface 平台上的数据工具
-hugingface-cli 国内镜像，可以快速下载hugingface上的模型
+
+使用hugingface-cli 国内镜像，可以快速下载hugingface上的模型
+
 ### 功能说明
 - 支持环境检测包含网络，磁盘，镜像地址是否可用
 - 支持网络容错，在断网异常情况下，默认进行重试3次
