@@ -21,6 +21,7 @@ a. 下载 [hf-mirror-cli.exe](https://github.com/wangshuai67/hf-mirror-cli/relea
 hf-mirror-cli Intel/dynamic_tinybert
 
 ```
+
 b. 如果为了方便，可以将此可执行文件，放置到python 的安装目录，一般python 安装目录已经配置了环境变量，所以直接使用
 
 #### 2. 第二种使用方法(支持linux和MacOS)
@@ -39,10 +40,25 @@ b. 如果为了方便，可以将此可执行文件，放置到python 的安装�
 
 ## 2. 默认使用的国内镜像地址 
   默认的不用配置，如果需要自定义 配置环境变量HF_ENDPOINT="镜像地址"
+  
   默认为 https://hf-mirror.com/   
+  
   站长[@padeoe](https://github.com/padeoe)
 
-## 3. 下载效果
+## 3. 常见问题
+如果需要登录授权才能下载使用`hf-mirror-cli 模型ID  Access_Token`，在官网这里获取[Access Token](https://huggingface.co/settings/tokens)
+```shell
+hf-mirror-cli Intel/dynamic_tinybert hf_mqwVoLYwjTYqiKCiNBFNzkwZKNtVeVxxxx
+```
+
+或
+
+```shell
+python .\hf-mirror-cli.py Intel/dynamic_tinybert hf_mqwVoLYwjTYqiKCiNBFNzkwZKNtVeVxxxx
+```
+ 
+
+## 4. 下载效果
    
 ```cmd
 E:\hf-mirror-cli\src\dist>hf-mirror-cli.exe Intel/dynamic_tinybert
