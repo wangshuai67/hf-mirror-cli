@@ -1,20 +1,27 @@
 # hf-mirror-cli 介绍
 由于 huggingface的仓库地址位于海外，每次下载dataset和model 太慢了，于是抽空开发了一个可以在windows开发环境，快速拉取huggingface 平台上的数据工具
 hugingface-cli 国内镜像，可以快速下载hugingface上的模型
-
+### 功能说明
+- 支持网络容错，在异常断网情况下，可以进行重试。
+- 支持并发执行下载
+- 支持断点续传
+- 在国内镜像无法使用的情况下支持从官网拉取
+### windows下载
+- [hf-mirror-cli.exe](https://github.com/wangshuai67/hf-mirror-cli/releases/download/1.0.0/hf-mirror-cli.exe)
 
 # 使用教程
-1. 下载 hf-mirror-cli.exe 到本地 ，然后打开cmd 执行以下命令
+1. 下载 [hf-mirror-cli.exe](https://github.com/wangshuai67/hf-mirror-cli/releases/download/1.0.0/hf-mirror-cli.exe) 到本地 ，然后打开cmd 执行以下命令
 ```shell
-hf-mirror-cli.exe Intel/dynamic_tinybert
+hf-mirror-cli Intel/dynamic_tinybert
 
 ```
 
-2. 镜像地址使用 
+2. 默认使用的国内镜像地址 
 
  https://hf-mirror.com/
 
 3. 下载效果
+   
 ```cmd
 E:\hf-mirror-cli\src\dist>hf-mirror-cli.exe Intel/dynamic_tinybert
 C:\Users\Administrator\.cache\huggingface\hub\hfd
@@ -48,5 +55,5 @@ model:Intel/dynamic_tinybert 下载完成,存放路径C:\Users\Administrator\.ca
 100%|############################################################| 268M/268M [00:18<00:00, 14.8MB/s]
 完成下载 pytorch_model.bin
 ```
-
+### 使用效果
 ![img.png](img.png)
