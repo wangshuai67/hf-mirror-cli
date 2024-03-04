@@ -7,6 +7,8 @@ hugingface-cli 国内镜像，可以快速下载hugingface上的模型
 - 支持并发执行下载，默认并发为10
 - 支持断点续传
 - 在国内镜像无法使用的情况下支持从官网拉取
+- 打包可执行文件后，已经内置了运行环境不需要配置python环境和安装依赖
+  
 ### windows下载
 - [hf-mirror-cli.exe](https://github.com/wangshuai67/hf-mirror-cli/releases/download/1.0.0/hf-mirror-cli.exe)
 
@@ -16,6 +18,7 @@ hugingface-cli 国内镜像，可以快速下载hugingface上的模型
 hf-mirror-cli Intel/dynamic_tinybert
 
 ```
+如果为了方便，可以将此可执行文件，放置到python 的安装目录，一般python 安装目录已经配置了环境变量，所以直接使用
 
 2. 默认使用的国内镜像地址 
 
