@@ -16,6 +16,9 @@ import concurrent.futures
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 import threading
+import argparse
+import tempfile
+import shutil
 
 # 设置环境变量
 HF_OFFICIAL_URL = 'https://huggingface.co'
@@ -113,14 +116,36 @@ def check_huggingface_unavailable_url():
 
 def get_remote_file_size(url):
     try:
-        response = requests.head(url, allow_redirects=False)
+        if HF_TOKEN:
+            headers = {'Authorization': f'Bearer {HF_TOKEN}'}
+            response = requests.head(url, allow_redirects=False, headers=headers)
+        else:
+            response = requests.head(url, allow_redirects=False, headers=headers)
         if response.status_code == 302 or response.status_code == 301:
             redirect_url = response.headers['Location']
-            redirect_response = requests.head(redirect_url)
+            if HF_TOKEN:
+                 headers = {'Authorization': f'Bearer {HF_TOKEN}'}
+            else:
+                headers = None
+            redirect_response = requests.head(redirect_url, headers=headers)
             return int(redirect_response.headers['Content-Length'])
         else:
             return int(response.headers['Content-Length'])
+    except KeyError:
+        print("No content-length key. We need to use the session to calculate the size of the content," \
+              "but we only allow content that is less than 128 MB.")
+        session = get_requests_retry_session()
+        response = session.get(url, stream=True, timeout=60)
+        size = 0
+        for chunk in response.iter_content(8192):
+            if chunk:
+                if size <= 2**27:
+                    size += len(chunk)
+                else:
+                    return size
+        return size
     except Exception as e:
+        
         return -1
 
 
@@ -161,6 +186,7 @@ def get_requests_retry_session(
         status_forcelist=(500, 502, 504, 404),
         session=None,
 ):
+    global HF_TOKEN
     session = session or requests.Session()
     retry = Retry(
         total=retries,
@@ -170,6 +196,7 @@ def get_requests_retry_session(
         status_forcelist=status_forcelist,
     )
     if HF_TOKEN:
+        print("Downloading with token:{}".format(HF_TOKEN))
         headers = {'Authorization': f'Bearer {HF_TOKEN}'}
         session.headers.update(headers)
     adapter = HTTPAdapter(max_retries=retry)
@@ -186,13 +213,13 @@ def get_requests_retry_session(
 def download_file_with_range(url, filename, start_byte, remote_file_size):
     check_disk_space(remote_file_size, filename, url)
     thread_name = threading.current_thread().name
-    print(f"线程-{thread_name}-下载-{url}")
-    print(f"支持端点续传 {filename}，本地文件大小：{start_byte}，服务端文件大小：{remote_file_size}")
+    print(f"\n线程-{thread_name}-下载-{url}")
+    print(f"\n支持端点续传 {filename}，本地文件大小：{start_byte}，服务端文件大小：{remote_file_size}")
     headers = {'Range': f'bytes={start_byte}-'}
     # 超时为1分钟，网络不稳定情况下也可以支持
     session = get_requests_retry_session()
     response = session.get(url, headers=headers, stream=True, timeout=60)
-
+    print("get respose {}".format(response.status_code))
     with open(filename, 'ab') as f:
         total_size = int(response.headers.get('content-length', 0))
         progress_bar = tqdm(total=total_size, unit='B', unit_scale=True, ncols=100, ascii=True, desc=f"<--- Downloading {filename}")
@@ -216,6 +243,7 @@ def download_file_simple(url, filename):
     print(f"线程-{thread_name} download_file_simple 开始下载-{url} ")
     session = get_requests_retry_session()
     response = session.get(url, stream=True, timeout=60)
+    
     check_disk_space(0, filename, url)
     with open(filename, 'wb') as f:
         total_size = int(response.headers.get('content-length', 0))
@@ -275,7 +303,6 @@ def execute_task(task, *args, **kwargs):
 下载模型
 """
 
-
 def download_model(model_id):
     hf_endpoint = os.environ.get('HF_ENDPOINT', 'https://huggingface.co')
     model_dir = model_id.split('/')[-1]
@@ -284,8 +311,15 @@ def download_model(model_id):
     if not os.path.isdir(f"{model_dir}/.git"):  # Check if the repo has already been cloned
         print(f"--->开始 clone repo from {repo_url}")
         response = requests.get(f"{repo_url}/info/refs?service=git-upload-pack")
-
-        if response.status_code != 200:
+        if response.status_code == 401 or response.status_code == 403:
+            if HF_TOKEN is None or HF_USERNAME is None:
+                print(f"HTTP Status Code: {response.status_code}.\nThe repository requires authentication, but --token and --username is not passed. Please get token from https://huggingface.co/settings/tokens.\nExiting.")
+                return
+            print(hf_endpoint.split("//"))
+            hf_domain = hf_endpoint.split("//")[1]
+            repo_url=f"https://{HF_USERNAME}:{HF_TOKEN}@{hf_domain}/{model_id}"
+            print(f"--->开始 clone repo from {repo_url}")
+        elif response.status_code != 200:
             print(f"Unexpected HTTP status code: {response.status_code}. Exiting.")
             return
         Repo.clone_from(repo_url, model_dir)
@@ -297,7 +331,10 @@ def download_model(model_id):
         origin.pull()
     os.chdir(model_dir)
     print(f"model_dir : {model_dir}")
-    print(f"模型下载目录：{os.getcwd()}")
+    dowanload_dir = os.getcwd()
+    if not os.path.exists(dowanload_dir):
+        os.makedirs(dowanload_dir)
+    print(f"模型下载目录：{dowanload_dir}")
     repo = Repo('.')
     print("--->启动并行下载大文件......")
     # install_result = repo.git.lfs('install')
@@ -306,26 +343,28 @@ def download_model(model_id):
     lines = lfs_files_cmd_result.split('\n')
     file_names = [line.split()[-1] for line in lines if line]
     print(f"--->大文件 文件数量{len(file_names)},file_names : {file_names}")
+    download_url = f"{hf_endpoint}/{model_id}"
     for index, filename in enumerate(file_names):
-        url = f"{repo_url}/resolve/main/{filename}"
+        url = f"{download_url}/resolve/main/{filename}"
         print(f"------>开始下载第{index + 1}个文件: {filename}，url: {url}")
         if filename == "":
             print(f"LFS file name is empty skip")
             continue
-        if os.path.exists(filename):
-            local_file_size = os.path.getsize(filename)
+        download_path = os.path.join(dowanload_dir, filename)
+        if os.path.exists(download_path):
+            local_file_size = os.path.getsize(download_path)
             remote_file_size = get_remote_file_size(url)
-
             if local_file_size < remote_file_size:
                 print(f"\nFile {filename} local_file_size={local_file_size}，remote_file_size={remote_file_size}")
                 print(f"\nFile {filename} exists but is incomplete. Continuing download...")
-                execute_task(download_file_with_range, url, filename, local_file_size, remote_file_size)
+                execute_task(download_file_with_range, url, download_path, local_file_size, remote_file_size)
             elif remote_file_size == -1:
-                execute_task(download_file_simple, url, filename)
+                execute_task(download_file_simple, url, download_path)
                 continue
+            elif local_file_size == remote_file_size:
+                print(f"File {filename} exists and matches the size from the remote.")
             else:
-                print(f"\nFile {filename} 已存在 不需要下载")
-                continue
+                print(f"Download {filename} failed, unknown error")
 
 
 print("--->start-开始检查环境和网络")
@@ -335,14 +374,21 @@ check_tool_availability()
 if len(sys.argv) < 2:
     print("正确用法: hf-mirror-cli.exe <modelId> \n示例: hf-mirror-cli.exe Intel/dynamic_tinybert")
     sys.exit(1)
-token = sys.argv[2] if len(sys.argv) >= 3 else None
-model_id = sys.argv[1]
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--token", type=str, default=None)
+parser.add_argument("--username", type=str, default=None)
+parser.add_argument("--model-id", type=str, required=True, help="the id of the model, example: Intel/dynamic_tinybert")
+args  = parser.parse_args()
+token = args.token
+model_id = args.model_id
+username = args.username
 # 本地测试
 # model_id = "gpt2"
 # # hf-mirror-cli bigscience/bloom-560m
 # token = ""
 HF_TOKEN = os.environ.get('HF_TOKEN', token)
+HF_USERNAME = os.environ.get("HF_USERNAME", username)
 base_path = os.path.abspath(os.path.dirname(__file__))
 model_dir = os.path.join(base_path, model_id.split('/')[-1])
 model_cache_local_path = get_hfd_file_path()
