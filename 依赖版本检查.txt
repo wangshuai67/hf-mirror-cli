@@ -1,0 +1,23 @@
+# 如果通过脚本本地运行异常，请核对一下依赖版本
+# 如果是windows 可执行文件不需要，已经内置好了
+certifi-2024.2.2
+charset-normalizer-3.3.2
+ colorama-0.4.6
+ filelock-3.13.1
+ fsspec-2024.2.0
+ gitdb-4.0.11
+ gitpython-3.1.42
+ huggingface-hub-0.21.3
+ idna-3.6
+ numpy-1.26.4
+ packaging-23.2
+ pyyaml-6.0.1
+ regex-2023.12.25
+ requests-2.31.0
+ safetensors-0.4.2
+ smmap-5.0.1
+ tokenizers-0.15.2
+ tqdm-4.66.2
+ transformers-4.38.2
+ typing-extensions-4.10.0
+ urllib3-2.2.1

@@ -17,8 +17,7 @@ from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 import threading
 import argparse
-import tempfile
-import shutil
+
 
 # 设置环境变量
 HF_OFFICIAL_URL = 'https://huggingface.co'
@@ -115,19 +114,15 @@ def check_huggingface_unavailable_url():
 
 
 def get_remote_file_size(url):
+    session=get_requests_retry_session()
     try:
-        if HF_TOKEN:
-            headers = {'Authorization': f'Bearer {HF_TOKEN}'}
-            response = requests.head(url, allow_redirects=False, headers=headers)
-        else:
-            response = requests.head(url, allow_redirects=False, headers=headers)
+        response = session.head(url, allow_redirects=False)
+        if response.status_code == 401:
+            print(f"\033[91m严重告警：状态码401,模型model_id：{model_id}未授权访问或模型ID不存在，请使用参数--token和--username\033[0m")
+            sys.exit(1)
         if response.status_code == 302 or response.status_code == 301:
             redirect_url = response.headers['Location']
-            if HF_TOKEN:
-                 headers = {'Authorization': f'Bearer {HF_TOKEN}'}
-            else:
-                headers = None
-            redirect_response = requests.head(redirect_url, headers=headers)
+            redirect_response = session.head(redirect_url)
             return int(redirect_response.headers['Content-Length'])
         else:
             return int(response.headers['Content-Length'])
@@ -168,10 +163,10 @@ def check_disk_space(file_size, filename, url):
             print(f"--->磁盘空间正常下载文件。剩余：{free_space_mb}MB")
 
     elif os.name == 'nt':
-        print("windows操作系统，默认为开发环境，不做磁盘空闲容量检查")
+        # windows操作系统，默认为开发环境，不做磁盘空闲容量检查
         return
     else:
-        print("未检测到操作系统类型，不做磁盘空闲容量检查")
+        print("\n 未检测到操作系统类型，不做磁盘空闲容量检查")
         return
 
 
@@ -186,7 +181,6 @@ def get_requests_retry_session(
         status_forcelist=(500, 502, 504, 404),
         session=None,
 ):
-    global HF_TOKEN
     session = session or requests.Session()
     retry = Retry(
         total=retries,
@@ -196,7 +190,7 @@ def get_requests_retry_session(
         status_forcelist=status_forcelist,
     )
     if HF_TOKEN:
-        print("Downloading with token:{}".format(HF_TOKEN))
+        print(f"downloading with username:{HF_USERNAME},token:{HF_TOKEN}")
         headers = {'Authorization': f'Bearer {HF_TOKEN}'}
         session.headers.update(headers)
     adapter = HTTPAdapter(max_retries=retry)
@@ -212,17 +206,19 @@ def get_requests_retry_session(
 
 def download_file_with_range(url, filename, start_byte, remote_file_size):
     check_disk_space(remote_file_size, filename, url)
-    thread_name = threading.current_thread().name
+    thread_name = threading.current_thread().name.replace("ThreadPoolExecutor-","");
     print(f"\n线程-{thread_name}-下载-{url}")
     print(f"\n支持端点续传 {filename}，本地文件大小：{start_byte}，服务端文件大小：{remote_file_size}")
     headers = {'Range': f'bytes={start_byte}-'}
     # 超时为1分钟，网络不稳定情况下也可以支持
     session = get_requests_retry_session()
     response = session.get(url, headers=headers, stream=True, timeout=60)
-    print("get respose {}".format(response.status_code))
+    print("get response {}".format(response.status_code))
+    progress_bar_file_name = os.path.basename(filename)
     with open(filename, 'ab') as f:
         total_size = int(response.headers.get('content-length', 0))
-        progress_bar = tqdm(total=total_size, unit='B', unit_scale=True, ncols=100, ascii=True, desc=f"<--- Downloading {filename}")
+        progress_bar = tqdm(total=total_size, unit='B', unit_scale=True, ncols=120, ascii=True,  desc=f"<--- downloading {progress_bar_file_name}")
+
 
         for chunk in response.iter_content(chunk_size=8192):
             if chunk:
@@ -243,15 +239,15 @@ def download_file_simple(url, filename):
     print(f"线程-{thread_name} download_file_simple 开始下载-{url} ")
     session = get_requests_retry_session()
     response = session.get(url, stream=True, timeout=60)
-    
     check_disk_space(0, filename, url)
+    progress_bar_file_name = os.path.basename(filename)
     with open(filename, 'wb') as f:
         total_size = int(response.headers.get('content-length', 0))
-        if total_size != 0:
-            progress_bar = tqdm(total=total_size, unit='B', unit_scale=True, ncols=100, ascii=True, desc=f"<--- Downloading {filename}")
-        else:
-            progress_bar = tqdm(unit='B', unit_scale=True, ncols=100, ascii=True, desc=f"<--- Downloading {filename}")
 
+        if total_size != 0:
+            progress_bar = tqdm(total=total_size, unit='B', unit_scale=True, ncols=120, ascii=True, desc=f"<--- downloading {progress_bar_file_name}")
+        else:
+            progress_bar = tqdm(unit='B', unit_scale=True, ncols=120, ascii=True, desc=f"<--- downloading {progress_bar_file_name}")
         for chunk in response.iter_content(chunk_size=8192):
             if chunk:
                 f.write(chunk)
@@ -304,13 +300,14 @@ def execute_task(task, *args, **kwargs):
 """
 
 def download_model(model_id):
+    model_id=model_id.rstrip()
     hf_endpoint = os.environ.get('HF_ENDPOINT', 'https://huggingface.co')
     model_dir = model_id.split('/')[-1]
     repo_url = f"{hf_endpoint}/{model_id}"
-
     if not os.path.isdir(f"{model_dir}/.git"):  # Check if the repo has already been cloned
         print(f"--->开始 clone repo from {repo_url}")
-        response = requests.get(f"{repo_url}/info/refs?service=git-upload-pack")
+        session = get_requests_retry_session()
+        response = session.get(f"{repo_url}/info/refs?service=git-upload-pack")
         if response.status_code == 401 or response.status_code == 403:
             if HF_TOKEN is None or HF_USERNAME is None:
                 print(f"HTTP Status Code: {response.status_code}.\nThe repository requires authentication, but --token and --username is not passed. Please get token from https://huggingface.co/settings/tokens.\nExiting.")
@@ -331,14 +328,12 @@ def download_model(model_id):
         origin.pull()
     os.chdir(model_dir)
     print(f"model_dir : {model_dir}")
-    dowanload_dir = os.getcwd()
-    if not os.path.exists(dowanload_dir):
-        os.makedirs(dowanload_dir)
-    print(f"模型下载目录：{dowanload_dir}")
+    download_dir = os.getcwd()
+    if not os.path.exists(download_dir):
+        os.makedirs(download_dir)
+    print(f"模型下载目录：{download_dir}")
     repo = Repo('.')
     print("--->启动并行下载大文件......")
-    # install_result = repo.git.lfs('install')
-    # print(f"install_result: {install_result}")
     lfs_files_cmd_result = repo.git.lfs('ls-files')
     lines = lfs_files_cmd_result.split('\n')
     file_names = [line.split()[-1] for line in lines if line]
@@ -350,7 +345,7 @@ def download_model(model_id):
         if filename == "":
             print(f"LFS file name is empty skip")
             continue
-        download_path = os.path.join(dowanload_dir, filename)
+        download_path = os.path.join(download_dir, filename)
         if os.path.exists(download_path):
             local_file_size = os.path.getsize(download_path)
             remote_file_size = get_remote_file_size(url)
@@ -371,22 +366,31 @@ print("--->start-开始检查环境和网络")
 print("--->检查当前环境是否安装了git和git-lfs")
 check_git_installation()
 check_tool_availability()
-if len(sys.argv) < 2:
-    print("正确用法: hf-mirror-cli.exe <modelId> \n示例: hf-mirror-cli.exe Intel/dynamic_tinybert")
-    sys.exit(1)
-
 parser = argparse.ArgumentParser()
 parser.add_argument("--token", type=str, default=None)
 parser.add_argument("--username", type=str, default=None)
-parser.add_argument("--model-id", type=str, required=True, help="the id of the model, example: Intel/dynamic_tinybert")
-args  = parser.parse_args()
+parser.add_argument("--model-id", type=str, default=None, help="the id of the model, example: Intel/dynamic_tinybert")
+parser.add_argument("modelId", type=str, nargs='?', default=None)
+args = parser.parse_args()
+
 token = args.token
-model_id = args.model_id
 username = args.username
+
+# If --model-id is not provided, use the positional argument modelId
+if args.model_id is None:
+    model_id = args.modelId
+else:
+    model_id = args.model_id
+
+if model_id is None:
+    print("正确用法: hf-mirror-cli.exe --model-id <modelId> 或 hf-mirror-cli.exe <modelId> \n示例: hf-mirror-cli.exe Intel/dynamic_tinybert")
+    sys.exit(1)
+
 # 本地测试
-# model_id = "gpt2"
+# model_id = "google/gemma-2b-it"
 # # hf-mirror-cli bigscience/bloom-560m
-# token = ""
+# token = "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"
+# username = "wangshuai6707"
 HF_TOKEN = os.environ.get('HF_TOKEN', token)
 HF_USERNAME = os.environ.get("HF_USERNAME", username)
 base_path = os.path.abspath(os.path.dirname(__file__))
@@ -396,4 +400,4 @@ os.chdir(model_cache_local_path)
 print("----->end-环境检查完毕正常")
 print("--->开始拉起下载模型数据并发任务")
 download_model(model_id)
-print(f"model:{model_id} 下载中,完成后model存放路径[{model_cache_local_path}]")
+print(f"model:{model_id} 下载完成后存放路径[{model_cache_local_path}]")
