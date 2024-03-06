@@ -363,7 +363,7 @@ def download_model(model_id):
                 execute_task(download_file_with_range, url, download_path, local_file_size, remote_file_size)
             elif local_file_size > remote_file_size:
                 if local_file_size > MAX_CACHE_SIZE:
-                    print(f"File {filename} local_file_size={local_file_size}, the local size greater than 128MB, may needs to continue the download process.")
+                    print(f"File {filename} local_file_size={local_file_size}, the local size greater than 128MB, may need to continue the download process.")
                     execute_task(download_file_with_range, url, download_path, local_file_size)
             elif remote_file_size == -1:
                 execute_task(download_file_simple, url, download_path)
