@@ -18,6 +18,8 @@ from requests.adapters import HTTPAdapter
 import threading
 import argparse
 
+#Some configuration
+MAX_CACHE_SIZE = 2**27 #128MB, the max size that we use to judge the remote size when no content-length 
 
 # 设置环境变量
 HF_OFFICIAL_URL = 'https://huggingface.co'
@@ -134,7 +136,7 @@ def get_remote_file_size(url):
         size = 0
         for chunk in response.iter_content(8192):
             if chunk:
-                if size <= 2**27:
+                if size <= MAX_CACHE_SIZE:
                     size += len(chunk)
                 else:
                     return size
@@ -204,11 +206,13 @@ def get_requests_retry_session(
 """
 
 
-def download_file_with_range(url, filename, start_byte, remote_file_size):
-    check_disk_space(remote_file_size, filename, url)
-    thread_name = threading.current_thread().name.replace("ThreadPoolExecutor-","");
+def download_file_with_range(url, filename, start_byte, remote_file_size=None):
+    if remote_file_size is not None:
+        check_disk_space(remote_file_size, filename, url)
+    thread_name = threading.current_thread().name.replace("ThreadPoolExecutor-","")
     print(f"\n线程-{thread_name}-下载-{url}")
-    print(f"\n支持端点续传 {filename}，本地文件大小：{start_byte}，服务端文件大小：{remote_file_size}")
+    if remote_file_size is not None:
+        print(f"\n支持端点续传 {filename}，本地文件大小：{start_byte}，服务端文件大小：{remote_file_size}")
     headers = {'Range': f'bytes={start_byte}-'}
     # 超时为1分钟，网络不稳定情况下也可以支持
     session = get_requests_retry_session()
@@ -299,20 +303,19 @@ def execute_task(task, *args, **kwargs):
 下载模型
 """
 
-def download_model(model_id):
-    model_id=model_id.rstrip()
+def download_model(model_id:str):
     hf_endpoint = os.environ.get('HF_ENDPOINT', 'https://huggingface.co')
     model_dir = model_id.split('/')[-1]
     repo_url = f"{hf_endpoint}/{model_id}"
     if not os.path.isdir(f"{model_dir}/.git"):  # Check if the repo has already been cloned
         print(f"--->开始 clone repo from {repo_url}")
+        #Avoid the space in HF_TOKEN and HF_USERNAME 
         session = get_requests_retry_session()
         response = session.get(f"{repo_url}/info/refs?service=git-upload-pack")
         if response.status_code == 401 or response.status_code == 403:
             if HF_TOKEN is None or HF_USERNAME is None:
                 print(f"HTTP Status Code: {response.status_code}.\nThe repository requires authentication, but --token and --username is not passed. Please get token from https://huggingface.co/settings/tokens.\nExiting.")
                 return
-            print(hf_endpoint.split("//"))
             hf_domain = hf_endpoint.split("//")[1]
             repo_url=f"https://{HF_USERNAME}:{HF_TOKEN}@{hf_domain}/{model_id}"
             print(f"--->开始 clone repo from {repo_url}")
@@ -356,6 +359,13 @@ def download_model(model_id):
             elif remote_file_size == -1:
                 execute_task(download_file_simple, url, download_path)
                 continue
+            elif remote_file_size < local_file_size:
+                print(f"\nFile {filename}'s local_file_size is greater than the remote size")
+                if local_file_size > MAX_CACHE_SIZE:
+                    print(f"The {filename}'s local_file_size is greater than the max size we setting that is {MAX_CACHE_SIZE}, we will use the resume from the break point try to download it")
+                    execute_task(download_file_with_range, url, download_path, local_file_size, remote_file_size=None)
+                else:
+                    print(f"Unknown error. Please check the remote size for the file {filename} by the web. The local size is:{local_file_size}")
             elif local_file_size == remote_file_size:
                 print(f"File {filename} exists and matches the size from the remote.")
             else:
@@ -386,13 +396,19 @@ if model_id is None:
     print("正确用法: hf-mirror-cli.exe --model-id <modelId> 或 hf-mirror-cli.exe <modelId> \n示例: hf-mirror-cli.exe Intel/dynamic_tinybert")
     sys.exit(1)
 
+
 # 本地测试
 # model_id = "google/gemma-2b-it"
 # # hf-mirror-cli bigscience/bloom-560m
 # token = "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"
 # username = "ssss"
+model_id=model_id.strip() #这里建议去除两端的空格
 HF_TOKEN = os.environ.get('HF_TOKEN', token)
 HF_USERNAME = os.environ.get("HF_USERNAME", username)
+if HF_TOKEN:
+    HF_TOKEN = HF_TOKEN.strip()
+if HF_USERNAME:
+    HF_USERNAME = HF_USERNAME.strip()
 base_path = os.path.abspath(os.path.dirname(__file__))
 model_dir = os.path.join(base_path, model_id.split('/')[-1])
 model_cache_local_path = get_hfd_file_path()
