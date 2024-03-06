@@ -389,8 +389,8 @@ if model_id is None:
 # 本地测试
 # model_id = "google/gemma-2b-it"
 # # hf-mirror-cli bigscience/bloom-560m
-# token = "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"
-# username = "wangshuai6707"
+# token = "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"
+# username = "ssss"
 HF_TOKEN = os.environ.get('HF_TOKEN', token)
 HF_USERNAME = os.environ.get("HF_USERNAME", username)
 base_path = os.path.abspath(os.path.dirname(__file__))

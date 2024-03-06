@@ -1,5 +1,7 @@
 # 如果通过脚本本地运行异常，请核对一下依赖版本
 # 如果是windows 可执行文件不需要，已经内置好了
+# pyinstaller --onefile  hf-mirror-cli.py
+
 certifi-2024.2.2
 charset-normalizer-3.3.2
  colorama-0.4.6
