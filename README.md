@@ -3,6 +3,7 @@
 
 使用hugingface-cli 国内镜像，可以快速下载hugingface上的模型
 
+兼容`hugingface-cli`的用法
 ### 功能说明
 - 支持环境检测包含网络，磁盘，镜像地址是否可用
 - 支持网络容错，在断网异常情况下，默认进行重试3次
@@ -46,15 +47,20 @@ b. 如果为了方便，可以将此可执行文件，放置到python 的安装�
   站长[@padeoe](https://github.com/padeoe)
 
 ## 3. 常见问题
-如果需要登录授权才能下载使用`hf-mirror-cli 模型ID  Access_Token`，在官网这里获取[Access Token](https://huggingface.co/settings/tokens)
+- 如果报错
 ```shell
-hf-mirror-cli Intel/dynamic_tinybert hf_mqwVoLYwjTYqiKCiNBFNzkwZKNtVeVxxxx
+严重告警：状态码401,模型model_id：google/gemma-2b-it未授权访问或模型ID不存在，请使用参数--token和--username
+```
+> 上面的报错 要么 模型Id输入错误，要么需要提供用户名和toke
+需要登录授权才能下载使用`hf-mirror-cli 模型ID  Access_Token`，在官网这里获取[Access Token](https://huggingface.co/settings/tokens)
+```shell
+> hf-mirror-cli google/gemma-2b-it --token HF的token --username 用户名
 ```
 
 或
 
 ```shell
-python .\hf-mirror-cli.py Intel/dynamic_tinybert hf_mqwVoLYwjTYqiKCiNBFNzkwZKNtVeVxxxx
+python .\hf-mirror-cli.py google/gemma-2b-it --token HF的token --username 用户名
 ```
  
 
