@@ -26,6 +26,8 @@ HF_MIRROR_URL = 'https://hf-mirror.com'
 os.environ["GIT_LFS_SKIP_SMUDGE"] = "1"
 os.environ["HF_ENDPOINT"] = HF_MIRROR_URL
 
+MAX_CACHE_SIZE = 2**27 #128MB, the max size that we use to judge the remote size when no content-length
+
 """
 检查环境中是否安装了 git和git-lfs
 """
@@ -139,7 +141,7 @@ def get_remote_file_size(url):
         size = 0
         for chunk in response.iter_content(8192):
             if chunk:
-                if size <= 2**27:
+                if size <= MAX_CACHE_SIZE:
                     size += len(chunk)
                 else:
                     return size
@@ -210,11 +212,13 @@ def get_requests_retry_session(
 """
 
 
-def download_file_with_range(url, filename, start_byte, remote_file_size):
-    check_disk_space(remote_file_size, filename, url)
+def download_file_with_range(url, filename, start_byte, remote_file_size=None):
+    if remote_file_size is not None:
+        check_disk_space(remote_file_size, filename, url)
     thread_name = threading.current_thread().name
     print(f"\n线程-{thread_name}-下载-{url}")
-    print(f"\n支持端点续传 {filename}，本地文件大小：{start_byte}，服务端文件大小：{remote_file_size}")
+    if remote_file_size is not None:
+        print(f"\n支持端点续传 {filename}，本地文件大小：{start_byte}，服务端文件大小：{remote_file_size}")
     headers = {'Range': f'bytes={start_byte}-'}
     # 超时为1分钟，网络不稳定情况下也可以支持
     session = get_requests_retry_session()
@@ -315,7 +319,6 @@ def download_model(model_id):
             if HF_TOKEN is None or HF_USERNAME is None:
                 print(f"HTTP Status Code: {response.status_code}.\nThe repository requires authentication, but --token and --username is not passed. Please get token from https://huggingface.co/settings/tokens.\nExiting.")
                 return
-            print(hf_endpoint.split("//"))
             hf_domain = hf_endpoint.split("//")[1]
             repo_url=f"https://{HF_USERNAME}:{HF_TOKEN}@{hf_domain}/{model_id}"
             print(f"--->开始 clone repo from {repo_url}")
@@ -358,6 +361,10 @@ def download_model(model_id):
                 print(f"\nFile {filename} local_file_size={local_file_size}，remote_file_size={remote_file_size}")
                 print(f"\nFile {filename} exists but is incomplete. Continuing download...")
                 execute_task(download_file_with_range, url, download_path, local_file_size, remote_file_size)
+            elif local_file_size > remote_file_size:
+                if local_file_size > MAX_CACHE_SIZE:
+                    print(f"File {filename} local_file_size={local_file_size}, the local size greater than 128MB, may needs to continue the download process.")
+                    execute_task(download_file_with_range, url, download_path, local_file_size)
             elif remote_file_size == -1:
                 execute_task(download_file_simple, url, download_path)
                 continue
