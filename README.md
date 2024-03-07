@@ -101,3 +101,6 @@ model:Intel/dynamic_tinybert 下载完成,存放路径C:\Users\Administrator\.ca
 ```
 ### 使用效果
 ![img.png](img.png)
+
+### 交流群
+![微信交流群](https://padeoe.com/wp-content/uploads/2023/11/%E5%9B%BE%E7%89%87_20231107095902.jpg)
