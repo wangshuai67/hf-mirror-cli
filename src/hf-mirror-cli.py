@@ -18,14 +18,75 @@ from requests.adapters import HTTPAdapter
 import threading
 import argparse
 
-#Some configuration
-MAX_CACHE_SIZE = 2**27 #128MB, the max size that we use to judge the remote size when no content-length 
-
 # 设置环境变量
 HF_OFFICIAL_URL = 'https://huggingface.co'
 HF_MIRROR_URL = 'https://hf-mirror.com'
 os.environ["GIT_LFS_SKIP_SMUDGE"] = "1"
 os.environ["HF_ENDPOINT"] = HF_MIRROR_URL
+
+
+HF_TOKEN = None
+HF_USERNAME = None
+model_id = None
+def main():
+    global HF_TOKEN
+    global HF_USERNAME
+    global model_id
+    global model_name
+    print("--->start-开始检查环境和网络")
+    print("--->检查当前环境是否安装了git和git-lfs")
+    check_git_installation()
+    check_tool_availability()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--token", type=str, default=None)
+    parser.add_argument("--username", type=str, default=None)
+    parser.add_argument("--model-id", type=str, default=None,
+                        help="the id of the model, example: Intel/dynamic_tinybert")
+    parser.add_argument("--model-name", type=str, default=None, help="To download a specific model file")
+    parser.add_argument("modelId", type=str, nargs='?', default=None)
+    args = parser.parse_args()
+
+    token = args.token
+    username = args.username
+
+    # If --model-id is not provided, use the positional argument modelId
+    if args.model_id is None:
+        model_id = args.modelId
+    else:
+        model_id = args.model_id
+
+    if model_id is None:
+        print(
+            "正确用法: hf-mirror-cli.exe --model-id <modelId> 或 hf-mirror-cli.exe <modelId> \n示例: hf-mirror-cli.exe Intel/dynamic_tinybert")
+        sys.exit(1)
+    
+    if args.model_name and args.model_id:
+        model_name = args.model_name
+    elif not args.model_id:
+        print("请指定model-id")
+    else:
+        sys.exit(1)
+
+
+
+    # # 本地测试
+    # model_id = "google/gemma-2b-it"
+    # # hf-mirror-cli bigscience/bloom-560m
+    # token = "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"
+    # username = "wangshuai6707"
+    HF_TOKEN = os.environ.get('HF_TOKEN', token)
+    HF_USERNAME = os.environ.get("HF_USERNAME", username)
+    base_path = os.path.abspath(os.path.dirname(__file__))
+    model_dir = os.path.join(base_path, model_id.split('/')[-1])
+    model_cache_local_path = get_hfd_file_path()
+    os.chdir(model_cache_local_path)
+    print("----->end-环境检查完毕正常")
+    print("--->开始拉起下载模型数据并发任务")
+    download_model(model_id, model_name)
+    print(f"model:{model_id} 下载完成后存放路径[{model_cache_local_path}]")
+
+
+
 
 """
 检查环境中是否安装了 git和git-lfs
@@ -116,11 +177,12 @@ def check_huggingface_unavailable_url():
 
 
 def get_remote_file_size(url):
-    session=get_requests_retry_session()
+    session = get_requests_retry_session()
     try:
         response = session.head(url, allow_redirects=False)
         if response.status_code == 401:
-            print(f"\033[91m严重告警：状态码401,模型model_id：{model_id}未授权访问或模型ID不存在，请使用参数--token和--username\033[0m")
+            print(
+                f"\033[91m严重告警：状态码401,模型model_id：{model_id}未授权访问或模型ID不存在，请使用参数--token和--username\033[0m")
             sys.exit(1)
         if response.status_code == 302 or response.status_code == 301:
             redirect_url = response.headers['Location']
@@ -136,13 +198,13 @@ def get_remote_file_size(url):
         size = 0
         for chunk in response.iter_content(8192):
             if chunk:
-                if size <= MAX_CACHE_SIZE:
+                if size <= 2 ** 27:
                     size += len(chunk)
                 else:
                     return size
         return size
     except Exception as e:
-        
+
         return -1
 
 
@@ -206,13 +268,11 @@ def get_requests_retry_session(
 """
 
 
-def download_file_with_range(url, filename, start_byte, remote_file_size=None):
-    if remote_file_size is not None:
-        check_disk_space(remote_file_size, filename, url)
-    thread_name = threading.current_thread().name.replace("ThreadPoolExecutor-","")
+def download_file_with_range(url, filename, start_byte, remote_file_size):
+    check_disk_space(remote_file_size, filename, url)
+    thread_name = threading.current_thread().name.replace("ThreadPoolExecutor-", "");
     print(f"\n线程-{thread_name}-下载-{url}")
-    if remote_file_size is not None:
-        print(f"\n支持端点续传 {filename}，本地文件大小：{start_byte}，服务端文件大小：{remote_file_size}")
+    print(f"\n支持端点续传 {filename}，本地文件大小：{start_byte}，服务端文件大小：{remote_file_size}")
     headers = {'Range': f'bytes={start_byte}-'}
     # 超时为1分钟，网络不稳定情况下也可以支持
     session = get_requests_retry_session()
@@ -221,8 +281,8 @@ def download_file_with_range(url, filename, start_byte, remote_file_size=None):
     progress_bar_file_name = os.path.basename(filename)
     with open(filename, 'ab') as f:
         total_size = int(response.headers.get('content-length', 0))
-        progress_bar = tqdm(total=total_size, unit='B', unit_scale=True, ncols=120, ascii=True,  desc=f"<--- downloading {progress_bar_file_name}")
-
+        progress_bar = tqdm(total=total_size, unit='B', unit_scale=True, ncols=120, ascii=True,
+                            desc=f"<--- downloading {progress_bar_file_name}")
 
         for chunk in response.iter_content(chunk_size=8192):
             if chunk:
@@ -249,9 +309,11 @@ def download_file_simple(url, filename):
         total_size = int(response.headers.get('content-length', 0))
 
         if total_size != 0:
-            progress_bar = tqdm(total=total_size, unit='B', unit_scale=True, ncols=120, ascii=True, desc=f"<--- downloading {progress_bar_file_name}")
+            progress_bar = tqdm(total=total_size, unit='B', unit_scale=True, ncols=120, ascii=True,
+                                desc=f"<--- downloading {progress_bar_file_name}")
         else:
-            progress_bar = tqdm(unit='B', unit_scale=True, ncols=120, ascii=True, desc=f"<--- downloading {progress_bar_file_name}")
+            progress_bar = tqdm(unit='B', unit_scale=True, ncols=120, ascii=True,
+                                desc=f"<--- downloading {progress_bar_file_name}")
         for chunk in response.iter_content(chunk_size=8192):
             if chunk:
                 f.write(chunk)
@@ -268,7 +330,7 @@ def download_file_simple(url, filename):
 
 def get_hfd_file_path():
     default_cache_path = file_utils.default_cache_path
-    cache_path = Path(default_cache_path) / 'hfd'
+    cache_path = Path(default_cache_path) / 'hfmirror'
     if not cache_path.exists():
         cache_path.mkdir(parents=True)
     print(f"--->当前huggingface模型的下载地址为{cache_path}")
@@ -303,21 +365,24 @@ def execute_task(task, *args, **kwargs):
 下载模型
 """
 
-def download_model(model_id:str):
+
+def download_model(model_id, model_name):
+    model_id = model_id.rstrip()
     hf_endpoint = os.environ.get('HF_ENDPOINT', 'https://huggingface.co')
     model_dir = model_id.split('/')[-1]
     repo_url = f"{hf_endpoint}/{model_id}"
     if not os.path.isdir(f"{model_dir}/.git"):  # Check if the repo has already been cloned
         print(f"--->开始 clone repo from {repo_url}")
-        #Avoid the space in HF_TOKEN and HF_USERNAME 
         session = get_requests_retry_session()
         response = session.get(f"{repo_url}/info/refs?service=git-upload-pack")
         if response.status_code == 401 or response.status_code == 403:
             if HF_TOKEN is None or HF_USERNAME is None:
-                print(f"HTTP Status Code: {response.status_code}.\nThe repository requires authentication, but --token and --username is not passed. Please get token from https://huggingface.co/settings/tokens.\nExiting.")
+                print(
+                    f"HTTP Status Code: {response.status_code}.\nThe repository requires authentication, but --token and --username is not passed. Please get token from https://huggingface.co/settings/tokens.\nExiting.")
                 return
+            print(hf_endpoint.split("//"))
             hf_domain = hf_endpoint.split("//")[1]
-            repo_url=f"https://{HF_USERNAME}:{HF_TOKEN}@{hf_domain}/{model_id}"
+            repo_url = f"https://{HF_USERNAME}:{HF_TOKEN}@{hf_domain}/{model_id}"
             print(f"--->开始 clone repo from {repo_url}")
         elif response.status_code != 200:
             print(f"Unexpected HTTP status code: {response.status_code}. Exiting.")
@@ -340,80 +405,69 @@ def download_model(model_id:str):
     lfs_files_cmd_result = repo.git.lfs('ls-files')
     lines = lfs_files_cmd_result.split('\n')
     file_names = [line.split()[-1] for line in lines if line]
-    print(f"--->大文件 文件数量{len(file_names)},file_names : {file_names}")
-    download_url = f"{hf_endpoint}/{model_id}"
-    for index, filename in enumerate(file_names):
-        url = f"{download_url}/resolve/main/{filename}"
-        print(f"------>开始下载第{index + 1}个文件: {filename}，url: {url}")
-        if filename == "":
-            print(f"LFS file name is empty skip")
-            continue
-        download_path = os.path.join(download_dir, filename)
-        if os.path.exists(download_path):
-            local_file_size = os.path.getsize(download_path)
-            remote_file_size = get_remote_file_size(url)
-            if local_file_size < remote_file_size:
-                print(f"\nFile {filename} local_file_size={local_file_size}，remote_file_size={remote_file_size}")
-                print(f"\nFile {filename} exists but is incomplete. Continuing download...")
-                execute_task(download_file_with_range, url, download_path, local_file_size, remote_file_size)
-            elif remote_file_size == -1:
-                execute_task(download_file_simple, url, download_path)
+    if not model_name:
+        print(f"--->大文件 文件数量{len(file_names)},file_names : {file_names}")
+        download_url = f"{hf_endpoint}/{model_id}"
+        for index, filename in enumerate(file_names):
+            url = f"{download_url}/resolve/main/{filename}"
+            print(f"------>开始下载第{index + 1}个文件: {filename}，url: {url}")
+            if filename == "":
+                print(f"LFS file name is empty skip")
                 continue
-            elif remote_file_size < local_file_size:
-                print(f"\nFile {filename}'s local_file_size is greater than the remote size")
-                if local_file_size > MAX_CACHE_SIZE:
-                    print(f"The {filename}'s local_file_size is greater than the max size we setting that is {MAX_CACHE_SIZE}, we will use the resume from the break point try to download it")
-                    execute_task(download_file_with_range, url, download_path, local_file_size, remote_file_size=None)
+            download_path = os.path.join(download_dir, filename)
+            if os.path.exists(download_path):
+                local_file_size = os.path.getsize(download_path)
+                remote_file_size = get_remote_file_size(url)
+                if local_file_size < remote_file_size:
+                    print(f"\nFile {filename} local_file_size={local_file_size}，remote_file_size={remote_file_size}")
+                    print(f"\nFile {filename} exists but is incomplete. Continuing download...")
+                    execute_task(download_file_with_range, url, download_path, local_file_size, remote_file_size)
+                elif remote_file_size == -1:
+                    execute_task(download_file_simple, url, download_path)
+                    continue
+                elif local_file_size == remote_file_size:
+                    print(f"File {filename} exists and matches the size from the remote.")
                 else:
-                    print(f"Unknown error. Please check the remote size for the file {filename} by the web. The local size is:{local_file_size}")
-            elif local_file_size == remote_file_size:
-                print(f"File {filename} exists and matches the size from the remote.")
-            else:
-                print(f"Download {filename} failed, unknown error")
+                    print(f"Download {filename} failed, unknown error")
+    else:
+        is_exist = False
+        new_file_names = []
+        for i in range(len(file_names)):
+            if model_name in file_names[i]:
+                new_file_names.append(file_names[i])
+                is_exist = True
+
+        if not is_exist:
+            print(f"模型名称错误！仓库没有该模型{model_name}")
+        else:
+            print(f"--->大文件 文件数量{len(new_file_names)},file_names : {new_file_names}")
+            download_url = f"{hf_endpoint}/{model_id}"
+            for index, filename in enumerate(new_file_names):
+                url = f"{download_url}/resolve/main/{filename}"
+                print(f"------>开始下载第{index + 1}个文件: {filename}，url: {url}")
+                if filename == "":
+                    print(f"LFS file name is empty skip")
+                    continue
+                download_path = os.path.join(download_dir, filename)
+                if os.path.exists(download_path):
+                    local_file_size = os.path.getsize(download_path)
+                    remote_file_size = get_remote_file_size(url)
+                    if local_file_size < remote_file_size:
+                        print(f"\nFile {filename} local_file_size={local_file_size}，remote_file_size={remote_file_size}")
+                        print(f"\nFile {filename} exists but is incomplete. Continuing download...")
+                        execute_task(download_file_with_range, url, download_path, local_file_size, remote_file_size)
+                    elif remote_file_size == -1:
+                        execute_task(download_file_simple, url, download_path)
+                        continue
+                    elif local_file_size == remote_file_size:
+                        print(f"File {filename} exists and matches the size from the remote.")
+                    else:
+                        print(f"Download {filename} failed, unknown error")
 
 
-print("--->start-开始检查环境和网络")
-print("--->检查当前环境是否安装了git和git-lfs")
-check_git_installation()
-check_tool_availability()
-parser = argparse.ArgumentParser()
-parser.add_argument("--token", type=str, default=None)
-parser.add_argument("--username", type=str, default=None)
-parser.add_argument("--model-id", type=str, default=None, help="the id of the model, example: Intel/dynamic_tinybert")
-parser.add_argument("modelId", type=str, nargs='?', default=None)
-args = parser.parse_args()
-
-token = args.token
-username = args.username
-
-# If --model-id is not provided, use the positional argument modelId
-if args.model_id is None:
-    model_id = args.modelId
-else:
-    model_id = args.model_id
-
-if model_id is None:
-    print("正确用法: hf-mirror-cli.exe --model-id <modelId> 或 hf-mirror-cli.exe <modelId> \n示例: hf-mirror-cli.exe Intel/dynamic_tinybert")
-    sys.exit(1)
 
 
-# 本地测试
-# model_id = "google/gemma-2b-it"
-# # hf-mirror-cli bigscience/bloom-560m
-# token = "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"
-# username = "ssss"
-model_id=model_id.strip() #这里建议去除两端的空格
-HF_TOKEN = os.environ.get('HF_TOKEN', token)
-HF_USERNAME = os.environ.get("HF_USERNAME", username)
-if HF_TOKEN:
-    HF_TOKEN = HF_TOKEN.strip()
-if HF_USERNAME:
-    HF_USERNAME = HF_USERNAME.strip()
-base_path = os.path.abspath(os.path.dirname(__file__))
-model_dir = os.path.join(base_path, model_id.split('/')[-1])
-model_cache_local_path = get_hfd_file_path()
-os.chdir(model_cache_local_path)
-print("----->end-环境检查完毕正常")
-print("--->开始拉起下载模型数据并发任务")
-download_model(model_id)
-print(f"model:{model_id} 下载完成后存放路径[{model_cache_local_path}]")
+
+if __name__ == "__main__":
+    main()
+
